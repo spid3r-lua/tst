@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>tst. {v0.1}</title>
+<style>
+body {
+font-family: sans-serif;
+text-align: center;
+background: #111;
+color: #fff;
+margin: 0;
+overflow: hidden;
+}
+
+.prompt {
+font-size: 2em;
+margin-top: 20px;
+}
+
+canvas {
+margin: 20px auto;
+display: block;
+}
+
+input {
+font-size: 1.2em;
+padding: 10px;
+margin-top: 10px;
+width: 60%;
+}
+
+.message {
+font-size: 1.2em;
+margin-top: 15px;
+}
+
+.shake {
+animation: shake 0.3s;
+}
+
+@keyframes shake {
+0% { transform: translateX(0); }
+25% { transform: translateX(-5px); }
+50% { transform: translateX(5px); }
+75% { transform: translateX(-5px); }
+100% { transform: translateX(0); }
+}
+
+#titleScreen {
+position: absolute;
+top: 0; left: 0; right: 0; bottom: 0;
+background: #111;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+z-index: 10;
+}
+
+#titleScreen button {
+padding: 10px 20px;
+font-size: 1.2em;
+cursor: pointer;
+margin-top: 20px;
+}
+
+#lives {
+font-size: 2em;
+margin-top: 10px;
+display: none;
+}
+</style>
+</head>
+<body>
+<div id="titleScreen">
+<h1>tst. {v0.1}</h1>
+<button onclick="startGame()">Start Game</button>
+</div>
+
+<div class="prompt" id="prompt">Loading dictionary...</div>
+<canvas id="wheel" width="200" height="200"></canvas>
+<input type="text" id="wordInput" placeholder="Type your word here..." disabled autocomplete="off" />
+<div class="message" id="message"></div>
+<div id="lives">❤️❤️❤️</div>
+
+<script>
+const promptEl = document.getElementById('prompt');
+const inputEl = document.getElementById('wordInput');
+const messageEl = document.getElementById('message');
+const canvas = document.getElementById('wheel');
+const ctx = canvas.getContext('2d');
+const titleScreen = document.getElementById('titleScreen');
+const livesEl = document.getElementById('lives');
+
+const letterCombos = ['st', 'tr', 'ng', 'bl', 'cr', 'nd', 'us', 're', 'un', 'er', 'ly', 'nt', 'le', 'ful', 'ess', 'ion', "is", "me", "x", "ze", "il", "ll", "pi", "pr", "int", "ro", "or", "ea", "ti", "wood", "te", "pe", "ar", "ph"];
+let promptLetters = '';
+let timer = 5;
+let timeLeft = timer;
+let interval;
+let lastTimestamp;
+let roundActive = false;
+let wordList = [];
+let usedWords = new Set();
+
+let lives = 3;
+const maxLives = 3;
+let wordsAnswered = 0;
+
+function getRandomPrompt() {
+return letterCombos[Math.floor(Math.random() * letterCombos.length)];
+}
+
+function drawWheel(timeFraction, typedText) {
+ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+ctx.beginPath();
+ctx.arc(100, 100, 90, 0, 2 * Math.PI);
+ctx.fillStyle = '#444';
+ctx.fill();
+
+ctx.beginPath();
+ctx.arc(100, 100, 90, -Math.PI / 2, (-Math.PI / 2) + 2 * Math.PI * timeFraction, false);
+ctx.lineWidth = 15;
+ctx.strokeStyle = '#0f0';
+ctx.stroke();
+
+const word = typedText.toLowerCase();
+const matchIndex = word.indexOf(promptLetters);
+let before = word;
+let match = '';
+let after = '';
+
+if (matchIndex !== -1) {
+before = word.slice(0, matchIndex);
+match = word.slice(matchIndex, matchIndex + promptLetters.length);
+after = word.slice(matchIndex + promptLetters.length);
+}
+
+ctx.font = 'bold 24px sans-serif';
+ctx.textAlign = 'left';
+ctx.textBaseline = 'middle';
+
+const xCenter = canvas.width / 2;
+const yCenter = canvas.height / 2;
+const beforeWidth = ctx.measureText(before).width;
+const matchWidth = ctx.measureText(match).width;
+const afterWidth = ctx.measureText(after).width;
+const totalWidth = beforeWidth + matchWidth + afterWidth;
+const startX = xCenter - totalWidth / 2;
+
+ctx.fillStyle = '#fff';
+ctx.fillText(before, startX, yCenter);
+
+if (match) {
+ctx.fillStyle = 'gray';
+ctx.fillText(match, startX + beforeWidth, yCenter);
+}
+
+if (after) {
+ctx.fillStyle = '#fff';
+ctx.fillText(after, startX + beforeWidth + matchWidth, yCenter);
+}
+}
+
+function startGame() {
+usedWords.clear();
+lives = maxLives;
+wordsAnswered = 0;
+updateLives();
+titleScreen.style.display = 'none';
+livesEl.style.display = 'block';
+startRound();
+}
+
+function startRound() {
+promptLetters = getRandomPrompt();
+promptEl.textContent = `Type a word containing: "${promptLetters}"`;
+inputEl.value = '';
+inputEl.disabled = false;
+inputEl.focus();
+messageEl.textContent = '';
+timeLeft = timer;
+lastTimestamp = null;
+roundActive = true;
+drawWheel(1, '');
+requestAnimationFrame(updateFrame);
+}
+
+function updateFrame(timestamp) {
+if (!lastTimestamp) lastTimestamp = timestamp;
+const delta = (timestamp - lastTimestamp) / 1000;
+lastTimestamp = timestamp;
+
+timeLeft -= delta;
+
+if (timeLeft <= 0) {
+timeLeft = 0;
+drawWheel(0, inputEl.value);
+shakeScreen();
+loseLife();
+startRound();
+return;
+}
+
+drawWheel(timeLeft / timer, inputEl.value);
+if (roundActive) requestAnimationFrame(updateFrame);
+}
+
+function validateInput() {
+const word = inputEl.value.toLowerCase().trim();
+
+if (!/^[a-z0-9-]+$/.test(word)) {
+messageEl.textContent = '❌ Only letters, numbers, and dashes allowed!';
+shakeScreen();
+return;
+}
+
+if (!wordList.includes(word)) {
+messageEl.textContent = '❌ Not a real word!';
+shakeScreen();
+} else if (!word.includes(promptLetters)) {
+messageEl.textContent = '❌ Word does not include the prompt letters!';
+shakeScreen();
+} else if (usedWords.has(word)) {
+messageEl.textContent = '❌ You already used this word!';
+shakeScreen();
+} else {
+messageEl.textContent = '✅ Good job!';
+usedWords.add(word);
+roundActive = false;
+wordsAnswered++;
+setTimeout(startRound, 1000);
+}
+}
+inputEl.addEventListener('input', function (e) {
+this.value = this.value.replace(/[^a-zA-Z0-9-]/g, '');
+});
+
+function loseLife() {
+lives--;
+updateLives();
+if (lives <= 0) {
+endGame();
+} else {
+resetAttempt();
+}
+}
+
+function updateLives() {
+let heartStr = '';
+for (let i = 0; i < maxLives; i++) {
+heartStr += i < lives ? '❤️' : '🤍';
+}
+livesEl.textContent = heartStr;
+}
+
+function endGame() {
+roundActive = false;
+inputEl.disabled = true;
+titleScreen.innerHTML = `
+<h1>Game Over</h1>
+<p>You answered <strong>${wordsAnswered}</strong> word${wordsAnswered !== 1 ? 's' : ''}.</p>
+<button onclick="startGame()">Restart</button>
+`;
+titleScreen.style.display = 'flex';
+livesEl.style.display = 'none';
+}
+
+function resetAttempt() {
+inputEl.value = '';
+inputEl.focus();
+}
+
+function shakeScreen() {
+document.body.classList.add('shake');
+setTimeout(() => {
+document.body.classList.remove('shake');
+}, 300);
+}
+
+inputEl.addEventListener('keydown', function (e) {
+if (e.key === 'Enter' && !inputEl.disabled && roundActive) {
+validateInput();
+}
+});
+
+
+// Load dictionary
+fetch('https://raw.githubusercontent.com/dwyl/english-words/master/words.txt')
+.then(res => res.text())
+.then(text => {
+wordList = text.split('\n').map(w => w.trim().toLowerCase());
+promptEl.textContent = 'Press Start to Begin';
+})
+.catch(err => {
+promptEl.textContent = '⚠️ Failed to load dictionary.';
+console.error(err);
+});
+</script>
+</body>
+</html>
